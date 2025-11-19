@@ -2,53 +2,48 @@ pipeline {
     agent any
 
     environment {
-        BLUE_SERVER_IP = "34.200.235.201"
-        GREEN_SERVER_IP = "18.208.207.12"
+        BLUE_SERVER = "ubuntu@34.200.235.201"
+        GREEN_SERVER = "ubuntu@18.208.207.12"
+        WAR_FILE = "bluegreen-webapp/target/bluegreen-webapp.war"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'master', url: 'https://github.com/Selvakailash/miniproject2025.git'
+                git url: 'https://github.com/Selvakailash/miniproject2025.git', branch: 'master'
             }
         }
 
         stage('Build WAR') {
             steps {
-                sh 'mvn clean package'
+                sh 'cd bluegreen-webapp && mvn clean package'
             }
         }
 
         stage('Deploy to BLUE Server') {
             steps {
-                sshagent(['tomcat-blue']) {
-                    sh '''
-                        echo "Deploying WAR to Blue Server..."
-                        scp -o StrictHostKeyChecking=no target/*.war ubuntu@34.200.235.201:/opt/tomcat11/webapps/blue.war
-                    '''
-                }
+                sh """
+                scp -o StrictHostKeyChecking=no ${WAR_FILE} ${BLUE_SERVER}:/var/lib/tomcat9/webapps/
+                """
             }
         }
 
         stage('Deploy to GREEN Server') {
             steps {
-                sshagent(['tomcat-green']) {
-                    sh '''
-                        echo "Deploying WAR to Green Server..."
-                        scp -o StrictHostKeyChecking=no target/*.war ubuntu@18.208.207.12:/opt/tomcat11/webapps/green.war
-                    '''
-                }
+                sh """
+                scp -o StrictHostKeyChecking=no ${WAR_FILE} ${GREEN_SERVER}:/var/lib/tomcat9/webapps/
+                """
             }
         }
     }
 
     post {
-        success {
-            echo "Blue-Green Deployment Completed Successfully!"
-        }
         failure {
             echo "Deployment Failed!"
+        }
+        success {
+            echo "Deployment Successful!"
         }
     }
 }
