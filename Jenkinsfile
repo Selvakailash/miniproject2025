@@ -6,7 +6,7 @@ pipeline {
         GREEN_SERVER = "ubuntu@18.208.207.12"
         WAR_FILE = "bluegreen-webapp/target/bluegreen-webapp.war"
         PEM_KEY = "/var/lib/jenkins/.ssh/miniproject.pem"
-        TOMCAT_PATH = "/opt/tomcat11/webapps"
+        TOMCAT_HOME = "/opt/tomcat11"
     }
 
     stages {
@@ -28,9 +28,9 @@ pipeline {
                 sh """
                 scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${BLUE_SERVER}:/home/ubuntu/
                 ssh -i ${PEM_KEY} ${BLUE_SERVER} '
-                    sudo mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_PATH}/ &&
-                    sudo chown -R ubuntu:ubuntu ${TOMCAT_PATH}/bluegreen-webapp.war &&
-                    sudo systemctl restart tomcat11
+                    ${TOMCAT_HOME}/bin/shutdown.sh
+                    mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_HOME}/webapps/
+                    ${TOMCAT_HOME}/bin/startup.sh
                 '
                 """
             }
@@ -41,9 +41,9 @@ pipeline {
                 sh """
                 scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${GREEN_SERVER}:/home/ubuntu/
                 ssh -i ${PEM_KEY} ${GREEN_SERVER} '
-                    sudo mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_PATH}/ &&
-                    sudo chown -R ubuntu:ubuntu ${TOMCAT_PATH}/bluegreen-webapp.war &&
-                    sudo systemctl restart tomcat11
+                    ${TOMCAT_HOME}/bin/shutdown.sh
+                    mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_HOME}/webapps/
+                    ${TOMCAT_HOME}/bin/startup.sh
                 '
                 """
             }
