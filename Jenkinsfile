@@ -5,7 +5,7 @@ pipeline {
         BLUE_SERVER = "ubuntu@34.200.235.201"
         GREEN_SERVER = "ubuntu@18.208.207.12"
         WAR_FILE = "bluegreen-webapp/target/bluegreen-webapp.war"
-        PEM_KEY = "/var/lib/jenkins/miniproject.pem"
+        PEM_KEY = "/var/lib/jenkins/.ssh/miniproject.pem"
     }
 
     stages {
@@ -25,7 +25,7 @@ pipeline {
         stage('Deploy to BLUE Server') {
             steps {
                 sh """
-                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${BLUE_SERVER}:/var/lib/tomcat11/webapps/
+                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${BLUE_SERVER}:/opt/tomcat11/webapps/
                 """
             }
         }
@@ -33,7 +33,7 @@ pipeline {
         stage('Deploy to GREEN Server') {
             steps {
                 sh """
-                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${GREEN_SERVER}:/var/lib/tomcat11/webapps/
+                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${GREEN_SERVER}:/opt/tomcat11/webapps/
                 """
             }
         }
