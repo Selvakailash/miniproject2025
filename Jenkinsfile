@@ -29,7 +29,7 @@ pipeline {
 
         stage('Determine Live Server') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+                withCredentials([usernamePassword(credentialsId: 'AWS',
                                                  usernameVariable: 'AWS_ACCESS_KEY_ID',
                                                  passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     script {
@@ -74,7 +74,7 @@ pipeline {
 
         stage('Switch ALB Traffic to Idle Server') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+                withCredentials([usernamePassword(credentialsId: 'AWS',
                                                  usernameVariable: 'AWS_ACCESS_KEY_ID',
                                                  passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                     script {
@@ -98,7 +98,7 @@ pipeline {
         failure {
             echo "Deployment Failed! Rolling back to previous live server: ${env.LIVE_SERVER}"
 
-            withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+            withCredentials([usernamePassword(credentialsId: 'AWS',
                                              usernameVariable: 'AWS_ACCESS_KEY_ID',
                                              passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
                 script {
