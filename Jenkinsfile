@@ -58,7 +58,7 @@ pipeline {
 
         stage('Switch ALB Traffic to GREEN') {
             steps {
-                withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                withAWS(credentials: 'AWS', region: 'us-east-1') {
                     sh """
                     aws elbv2 modify-listener \
                         --listener-arn ${LISTENER_ARN} \
