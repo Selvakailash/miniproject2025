@@ -58,11 +58,13 @@ pipeline {
 
         stage('Switch ALB Traffic to GREEN') {
             steps {
-                sh """
-                aws elbv2 modify-listener \
-                    --listener-arn ${LISTENER_ARN} \
-                    --default-actions Type=forward,TargetGroupArn=${GREEN_TG_ARN}
-                """
+                withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                    sh """
+                    aws elbv2 modify-listener \
+                        --listener-arn ${LISTENER_ARN} \
+                        --default-actions Type=forward,TargetGroupArn=${GREEN_TG_ARN}
+                    """
+                }
             }
         }
     }
@@ -74,11 +76,13 @@ pipeline {
         failure {
             echo "Deployment Failed! Rolling back to BLUE"
 
-            sh """
-            aws elbv2 modify-listener \
-                --listener-arn ${LISTENER_ARN} \
-                --default-actions Type=forward,TargetGroupArn=${BLUE_TG_ARN}
-            """
+            withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+                sh """
+                aws elbv2 modify-listener \
+                    --listener-arn ${LISTENER_ARN} \
+                    --default-actions Type=forward,TargetGroupArn=${BLUE_TG_ARN}
+                """
+            }
         }
     }
 }
