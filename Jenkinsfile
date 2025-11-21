@@ -30,7 +30,7 @@ pipeline {
         stage('Determine Live Server') {
             steps {
                 script {
-                    withAWS(credentials: 'AWS', region: 'us-east-1') {
+                    withAWS(credentials: 'aws-cred', region: 'us-east-1') {
                         LIVE_TG_ARN = sh(script: """aws elbv2 describe-listeners \
                             --listener-arn ${LISTENER_ARN} \
                             --query "Listeners[0].DefaultActions[0].TargetGroupArn" \
