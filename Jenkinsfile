@@ -15,7 +15,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git url: 'https://github.com/Selvakailash/miniproject2025.git', branch: 'master'
@@ -28,42 +27,58 @@ pipeline {
             }
         }
 
-        stage('Deploy to BLUE Server') {
+        stage('Determine Live Server') {
             steps {
-                sh """
-                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${BLUE_SERVER}:/home/ubuntu/
-                ssh -i ${PEM_KEY} ${BLUE_SERVER} '
-                    ${TOMCAT_HOME}/bin/shutdown.sh
-                    rm -rf ${TOMCAT_HOME}/webapps/bluegreen-webapp*
-                    mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_HOME}/webapps/
-                    ${TOMCAT_HOME}/bin/startup.sh
-                '
-                """
+                script {
+                    // Query ALB to find current live target group
+                    def listener = sh(script: """
+                        aws elbv2 describe-listeners --listener-arn ${LISTENER_ARN} \
+                        --query 'Listeners[0].DefaultActions[0].ForwardConfig.TargetGroups[0].TargetGroupArn' \
+                        --output text
+                    """, returnStdout: true).trim()
+
+                    if (listener == BLUE_TG_ARN) {
+                        env.LIVE_SERVER = "BLUE"
+                        env.IDLE_SERVER = "GREEN"
+                    } else {
+                        env.LIVE_SERVER = "GREEN"
+                        env.IDLE_SERVER = "BLUE"
+                    }
+                    echo "Live Server: ${env.LIVE_SERVER}, Idle Server: ${env.IDLE_SERVER}"
+                }
             }
         }
 
-        stage('Deploy to GREEN Server') {
+        stage('Deploy to Idle Server') {
             steps {
-                sh """
-                scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${GREEN_SERVER}:/home/ubuntu/
-                ssh -i ${PEM_KEY} ${GREEN_SERVER} '
-                    ${TOMCAT_HOME}/bin/shutdown.sh
-                    rm -rf ${TOMCAT_HOME}/webapps/bluegreen-webapp*
-                    mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_HOME}/webapps/
-                    ${TOMCAT_HOME}/bin/startup.sh
-                '
-                """
-            }
-        }
+                script {
+                    def targetServer = (env.IDLE_SERVER == "BLUE") ? BLUE_SERVER : GREEN_SERVER
 
-        stage('Switch ALB Traffic to GREEN') {
-            steps {
-                withAWS(credentials: 'AWS', region: 'us-east-1') {
                     sh """
-                    aws elbv2 modify-listener \
-                        --listener-arn ${LISTENER_ARN} \
-                        --default-actions Type=forward,TargetGroupArn=${GREEN_TG_ARN}
+                        scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${targetServer}:/home/ubuntu/
+                        ssh -i ${PEM_KEY} ${targetServer} '
+                            ${TOMCAT_HOME}/bin/shutdown.sh
+                            rm -rf ${TOMCAT_HOME}/webapps/bluegreen-webapp*
+                            mv /home/ubuntu/bluegreen-webapp.war ${TOMCAT_HOME}/webapps/
+                            ${TOMCAT_HOME}/bin/startup.sh
+                        '
                     """
+                }
+            }
+        }
+
+        stage('Switch ALB Traffic to Idle Server') {
+            steps {
+                script {
+                    def targetTG = (env.IDLE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
+
+                    withAWS(credentials: 'AWS', region: 'us-east-1') {
+                        sh """
+                        aws elbv2 modify-listener \
+                            --listener-arn ${LISTENER_ARN} \
+                            --default-actions Type=forward,TargetGroupArn=${targetTG}
+                        """
+                    }
                 }
             }
         }
@@ -71,17 +86,20 @@ pipeline {
 
     post {
         success {
-            echo "Blue–Green Deployment Completed Successfully!"
+            echo "Blue–Green Deployment Completed Successfully! New live server: ${env.IDLE_SERVER}"
         }
         failure {
-            echo "Deployment Failed! Rolling back to BLUE"
+            echo "Deployment Failed! Rolling back to previous live server: ${env.LIVE_SERVER}"
 
-            withAWS(credentials: 'aws-creds', region: 'us-east-1') {
-                sh """
-                aws elbv2 modify-listener \
-                    --listener-arn ${LISTENER_ARN} \
-                    --default-actions Type=forward,TargetGroupArn=${BLUE_TG_ARN}
-                """
+            script {
+                def rollbackTG = (env.LIVE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
+                withAWS(credentials: 'AWS', region: 'us-east-1') {
+                    sh """
+                    aws elbv2 modify-listener \
+                        --listener-arn ${LISTENER_ARN} \
+                        --default-actions Type=forward,TargetGroupArn=${rollbackTG}
+                    """
+                }
             }
         }
     }
