@@ -29,22 +29,27 @@ pipeline {
 
         stage('Determine Live Server') {
             steps {
-                script {
-                    def liveTG = sh(
-                        script: "aws elbv2 describe-listeners --listener-arn ${LISTENER_ARN} --query 'Listeners[0].DefaultActions[0].TargetGroupArn' --output text",
-                        returnStdout: true
-                    ).trim()
+                withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+                                                 usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                                 passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    script {
+                        def liveTG = sh(script: """
+                            aws elbv2 describe-listeners \
+                            --listener-arn ${LISTENER_ARN} \
+                            --query 'Listeners[0].DefaultActions[0].TargetGroupArn' \
+                            --output text
+                        """, returnStdout: true).trim()
 
-                    if (liveTG == BLUE_TG_ARN) {
-                        env.LIVE_SERVER = "BLUE"
-                        env.IDLE_SERVER = "GREEN"
-                    } else {
-                        env.LIVE_SERVER = "GREEN"
-                        env.IDLE_SERVER = "BLUE"
+                        if (liveTG == BLUE_TG_ARN) {
+                            env.LIVE_SERVER = "BLUE"
+                            env.IDLE_SERVER = "GREEN"
+                        } else {
+                            env.LIVE_SERVER = "GREEN"
+                            env.IDLE_SERVER = "BLUE"
+                        }
+
+                        echo "Live Server: ${env.LIVE_SERVER}, Idle Server: ${env.IDLE_SERVER}"
                     }
-
-                    echo "Live Server: ${env.LIVE_SERVER}"
-                    echo "Idle Server: ${env.IDLE_SERVER}"
                 }
             }
         }
@@ -53,6 +58,7 @@ pipeline {
             steps {
                 script {
                     def targetServer = (env.IDLE_SERVER == "BLUE") ? BLUE_SERVER : GREEN_SERVER
+
                     sh """
                         scp -i ${PEM_KEY} -o StrictHostKeyChecking=no ${WAR_FILE} ${targetServer}:/home/ubuntu/
                         ssh -i ${PEM_KEY} ${targetServer} '
@@ -68,16 +74,18 @@ pipeline {
 
         stage('Switch ALB Traffic to Idle Server') {
             steps {
-                script {
-                    def targetTG = (env.IDLE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
-                    withAWS(credentials: 'aws-cred', region: 'us-east-1') {
+                withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+                                                 usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                                 passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                    script {
+                        def targetTG = (env.IDLE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
+
                         sh """
-                            aws elbv2 modify-listener \
-                                --listener-arn ${LISTENER_ARN} \
-                                --default-actions Type=forward,TargetGroupArn=${targetTG}
+                        aws elbv2 modify-listener \
+                            --listener-arn ${LISTENER_ARN} \
+                            --default-actions Type=forward,TargetGroupArn=${targetTG}
                         """
                     }
-                    echo "Traffic switched to ${env.IDLE_SERVER} server."
                 }
             }
         }
@@ -89,13 +97,17 @@ pipeline {
         }
         failure {
             echo "Deployment Failed! Rolling back to previous live server: ${env.LIVE_SERVER}"
-            script {
-                def rollbackTG = (env.LIVE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
-                withAWS(credentials: 'aws-cred', region: 'us-east-1') {
+
+            withCredentials([usernamePassword(credentialsId: 'aws-userpass',
+                                             usernameVariable: 'AWS_ACCESS_KEY_ID',
+                                             passwordVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                script {
+                    def rollbackTG = (env.LIVE_SERVER == "BLUE") ? BLUE_TG_ARN : GREEN_TG_ARN
+
                     sh """
-                        aws elbv2 modify-listener \
-                            --listener-arn ${LISTENER_ARN} \
-                            --default-actions Type=forward,TargetGroupArn=${rollbackTG}
+                    aws elbv2 modify-listener \
+                        --listener-arn ${LISTENER_ARN} \
+                        --default-actions Type=forward,TargetGroupArn=${rollbackTG}
                     """
                 }
             }
